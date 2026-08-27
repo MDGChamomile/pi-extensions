@@ -22,6 +22,11 @@ const PROJECT_CONFIG_DIR_NAME = (PiCodingAgent as { CONFIG_DIR_NAME?: string }).
 
 type BlockResult = { block: true; reason: string };
 type ReviewDisplayState = "waiting" | "approved" | "revise" | "ask_user" | "blocked";
+
+function isTerminalReviewState(state: ReviewDisplayState): boolean {
+  return state === "approved" || state === "revise" || state === "blocked";
+}
+
 type ReviewTarget = { toolName: string; toolCallId?: string };
 type ReviewRow = {
   gate: Gate;
@@ -411,11 +416,15 @@ export default function autoPermissionsExtension(pi: ExtensionAPI) {
           lastComponent: state.autoPermissionsBaseCallComponent,
         });
         state.autoPermissionsBaseCallComponent = base;
-        reviewRowInvalidators.set(context.toolCallId, context.invalidate);
+        const review = reviewRows.get(context.toolCallId);
+        if (!review || !isTerminalReviewState(review.state)) {
+          reviewRowInvalidators.set(context.toolCallId, context.invalidate);
+        } else {
+          reviewRowInvalidators.delete(context.toolCallId);
+        }
 
         const container = new Container();
         container.addChild(base);
-        const review = reviewRows.get(context.toolCallId);
         if (review) {
           const status = review.state === "waiting"
             ? theme.fg("warning", "◌ guardian running")
@@ -476,7 +485,16 @@ export default function autoPermissionsExtension(pi: ExtensionAPI) {
 
     if (target.toolName === "bash" && target.toolCallId && ownsBashRenderer()) {
       reviewRows.set(target.toolCallId, { gate, state, reviewer, detail });
-      reviewRowInvalidators.get(target.toolCallId)?.();
+      const invalidate = reviewRowInvalidators.get(target.toolCallId);
+      if (isTerminalReviewState(state)) {
+        try {
+          invalidate?.();
+        } finally {
+          reviewRowInvalidators.delete(target.toolCallId);
+        }
+      } else {
+        invalidate?.();
+      }
       return;
     }
 
@@ -634,7 +652,7 @@ export default function autoPermissionsExtension(pi: ExtensionAPI) {
 
   pi.on("tool_execution_end", async (event) => {
     if (event.toolName !== "bash") return;
-    if (!reviewRows.has(event.toolCallId)) reviewRowInvalidators.delete(event.toolCallId);
+    reviewRowInvalidators.delete(event.toolCallId);
   });
 
   pi.registerTool({
