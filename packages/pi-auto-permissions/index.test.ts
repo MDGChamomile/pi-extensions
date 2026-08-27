@@ -685,6 +685,7 @@ describe("auto permissions tool gate", () => {
           invalidate: () => { invalidations++; },
           lastComponent,
           executionStarted: true,
+          isPartial: true,
         },
       );
       return (lastComponent as { render(width: number): string[] }).render(120).join("\n");
@@ -735,6 +736,7 @@ describe("auto permissions tool gate", () => {
           invalidate: () => { invalidations++; },
           lastComponent,
           executionStarted: true,
+          isPartial: true,
         },
       );
       return lastComponent.render(120).join("\n");
@@ -774,6 +776,7 @@ describe("auto permissions tool gate", () => {
           invalidate: () => { invalidations++; },
           lastComponent,
           executionStarted: true,
+          isPartial: true,
         },
       );
       return lastComponent.render(120).join("\n");
@@ -811,22 +814,36 @@ describe("auto permissions tool gate", () => {
     expect(harnessState.widgets).toHaveLength(2);
   });
 
-  test("releases unguarded bash row invalidators when execution ends", async () => {
+  test("does not re-register unguarded bash row invalidators after execution ends", async () => {
     useToolRowConfig();
     const harnessState = harness([], "tui");
     await harnessState.sessionStartHandler({}, harnessState.ctx);
     let invalidations = 0;
+    const state = {};
+    const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
     harnessState.bashTool.renderCall(
       { command: "echo safe" },
-      { fg: (_color: string, text: string) => text, bold: (text: string) => text },
+      theme,
       {
-        state: {},
+        state,
         toolCallId: "call-safe",
         invalidate: () => { invalidations++; },
         executionStarted: true,
+        isPartial: true,
       },
     );
     await harnessState.toolExecutionEndHandler({ toolName: "bash", toolCallId: "call-safe" });
+    harnessState.bashTool.renderCall(
+      { command: "echo safe" },
+      theme,
+      {
+        state,
+        toolCallId: "call-safe",
+        invalidate: () => { invalidations++; },
+        executionStarted: true,
+        isPartial: false,
+      },
+    );
     await harnessState.sessionShutdownHandler({}, harnessState.ctx);
     expect(invalidations).toBe(0);
   });

@@ -417,7 +417,8 @@ export default function autoPermissionsExtension(pi: ExtensionAPI) {
         });
         state.autoPermissionsBaseCallComponent = base;
         const review = reviewRows.get(context.toolCallId);
-        if (!review || !isTerminalReviewState(review.state)) {
+        const canStillChange = context.isPartial && (!review || !isTerminalReviewState(review.state));
+        if (canStillChange) {
           reviewRowInvalidators.set(context.toolCallId, context.invalidate);
         } else {
           reviewRowInvalidators.delete(context.toolCallId);
